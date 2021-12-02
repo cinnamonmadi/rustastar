@@ -1,18 +1,7 @@
-use std::fmt;
+use std::process;
+use std::io;
 
-#[derive(Debug)]
-#[derive(Clone)]
-#[derive(Copy)]
-enum Direction {
-    UP,
-    RIGHT,
-    DOWN,
-    LEFT
-}
-
-#[derive(Debug)]
-#[derive(Clone)]
-#[derive(Copy)]
+#[derive(Debug, Clone, Copy)]
 struct Point {
     x: i32,
     y: i32
@@ -25,9 +14,7 @@ const DIRECTIONS: [Point; 4] = [
     Point { x: -1, y: 0 },
 ];
 
-#[derive(Debug)]
-#[derive(Clone)]
-#[derive(Copy)]
+#[derive(Debug, Clone)]
 struct Node {
     position: Point,
     path: Vec<Point>,
@@ -41,10 +28,16 @@ impl Node {
     }
 
     fn children(&self) -> Vec<Node> {
-        DIRECTIONS.iter().map(|direction| Node {
-            position: Point { x: self.position.x + direction.x, y: self.position.y + direction.y },
-            path: self.path.iter().cloned().chain(),
-            length: self.length + 1,
+        DIRECTIONS.iter().map(|direction| { 
+            let next_point = Point { x: self.position.x + direction.x, y: self.position.y + direction.y };
+            let mut new_path = self.path.clone();
+            new_path.push(next_point);
+
+            Node {
+                position: next_point,
+                path: new_path,
+                length: self.length + 1,
+            }
         }).collect()
     }
 }
@@ -70,6 +63,7 @@ fn pop_smallest(nodes: &mut Vec<Node>, goal: &Point) -> Node {
 struct Board {
     tiles: Vec<bool>,
     width: usize,
+    height: usize,
 }
 
 impl Board {
@@ -77,6 +71,61 @@ impl Board {
         Board {
             tiles: vec![false; width * height],
             width: width,
+            height: height,
+        }
+    }
+
+    fn pathfind(&self, start: &Point, goal: &Point) -> Option<Vec<Point>> {
+
+        let mut frontier: Vec<Node> = vec![Node {
+            position: Point { x: start.x, y: start.y },
+            path: Vec::new(),
+            length: 0
+        }];
+        let mut explored: Vec<Node> = Vec::new();
+
+        loop {
+            if frontier.is_empty() {
+                println!("Pathfinding failed!");
+                return None;
+            }
+
+            let smallest = pop_smallest(&mut frontier, goal);
+
+            if smallest.position.x == goal.x && smallest.position.y == goal.y {
+                return Some(smallest.path);
+            }
+
+            let children = smallest.children();
+            explored.push(smallest);
+
+            'child_loop: for child in children {
+                if child.position.x < 0 || child.position.y < 0 || child.position.x >= self.width as i32 || child.position.y >= self.height as i32 {
+                    continue 'child_loop;
+                }
+
+                let index = child.position.x as usize + (child.position.y as usize * self.width);
+                if self.tiles[index] {
+                    continue 'child_loop;
+                }
+
+                for node in explored.iter() {
+                    if child.position.x == node.position.x && child.position.y == node.position.y {
+                        continue 'child_loop;
+                    }
+                }
+
+                for i in 0..frontier.len() {
+                    if child.position.x == frontier[i].position.x && child.position.y == frontier[i].position.y {
+                        if child.score(goal) < frontier[i].score(goal) {
+                            frontier[i] = child;
+                        }
+                        continue 'child_loop;
+                    }
+                }
+
+                frontier.push(child);
+            }
         }
     }
 }
@@ -92,6 +141,7 @@ impl From<String> for Board {
         let mut new_board = Board {
             tiles: Vec::new(),
             width: width,
+            height: 0,
         };
 
         for c in s.chars() {
@@ -102,63 +152,63 @@ impl From<String> for Board {
             }
         }
 
+        new_board.height = new_board.tiles.len() / width;
+
         new_board
     }
 }
 
-impl fmt::Display for Board {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut board_string = String::new();
-        let mut x = 0usize;
-        for value in self.tiles.iter() {
-            if *value {
-                board_string.push('X');
+fn print_board(board: &Board, pathfinder_position: &Point, goal_position: &Point) {
+    for y in 0..board.height {
+        for x in 0..board.width {
+            if x as i32 == pathfinder_position.x && y as i32 == pathfinder_position.y {
+                print!("O");
+            } else if x as i32 == goal_position.x && y as i32 == goal_position.y { 
+                print!("G");
             } else {
-                board_string.push(' ');
-            }
-
-            x += 1;
-            if x >= self.width {
-                x = 0;
-                board_string.push('\n');
+                let index = x + (y * board.width);
+                if board.tiles[index] {
+                    print!("X");
+                } else {
+                    print!(" ");
+                }
             }
         }
-        write!(f, "{}", board_string)
-    }
-
-    fn pathfind_step(&self, start: &Point, goal: &Point) -> Option<Direction> {
-        let mut frontier =
+        print!("\n");
     }
 }
 
 fn main() {
     let mut board_string = String::new();
-    board_string.push_str("XXXXX\n");
-    board_string.push_str("X   X\n");
-    board_string.push_str("X X X\n");
-    board_string.push_str("X   X\n");
-    board_string.push_str("XXXXX");
-    let test: Board = board_string.into();
-    println!("{}", test);
+    board_string.push_str("XXXXXXXXXXXXXXXX\n");
+    board_string.push_str("X              X\n");
+    board_string.push_str("X XXXXX   XXXXXX\n");
+    board_string.push_str("X     X        X\n");
+    board_string.push_str("X     X   XXX  X\n");
+    board_string.push_str("X     X    X   X\n");
+    board_string.push_str("X         X    X\n");
+    board_string.push_str("X        X     X\n");
+    board_string.push_str("XXXXXXXXXXXXXXXX");
 
-    let path = Node {
-        position: Point {
-            x: 3,
-            y: 3
-        },
-        direction: Direction::UP,
-        length: 5,
-    };
-    let goal = Point { x: 5, y: 5 };
-    let mut children = path.children();
-    for child in children.iter() {
-        println!("{} {}", child.position.x, child.position.y);
+    let board: Board = board_string.into();
+    let start = Point { x: 5, y: 3 };
+    let goal = Point { x: 11, y: 7 };
+    let result = board.pathfind(&start, &goal);
+
+    if result.is_none() {
+        println!("Pathfinding failed! :(");
+        process::exit(0);
     }
-    println!("---");
-    let smol = pop_smallest(&mut children, &goal);
-    println!("{} {}", smol.position.x, smol.position.y);
-    println!("---");
-    for child in children {
-        println!("{} {}", child.position.x, child.position.y);
+
+    let result = result.unwrap();
+    let mut result_index = 0;
+
+    while result_index != result.len() {
+        print_board(&board, &result[result_index], &goal);
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).expect("Failed to read line!");
+
+        result_index += 1;
     }
 }
